@@ -10,9 +10,7 @@ async def startup():
     Constructs the bot and then runs ``start``, so that a clientsession can be shared.
     """
     async with aiohttp.ClientSession() as cs:
-        bot = Bot()
-
-        bot.session = cs
+        bot = Bot(cs)
         await bot.start(bot.config["token"])
 
 

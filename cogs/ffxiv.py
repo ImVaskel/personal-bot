@@ -11,7 +11,7 @@ import discord
 import pyxivapi
 from discord.ext import commands, menus
 from discord.ext.menus.views import ViewMenuPages
-from utils import Embed
+from utils import Embed, FormatList
 
 
 class FormatCharacterResponse(menus.ListPageSource):
@@ -39,45 +39,6 @@ class FormatCharacterResponse(menus.ListPageSource):
                 f"**Feast Matches:** {entry['FeastMatches']}\n"
             ),
         )
-
-        return embed
-
-
-class FormatList(menus.ListPageSource):
-    """Formats a list like
-    ```
-    1. A
-    2. B
-    3. C
-    ```
-    Or
-    ```
-    A
-    B
-    C
-    ```
-    depending on whether ``number`` is passed.
-    """
-
-    def __init__(self, entries, *, per_page: Optional[int] = 5, number: bool = False):
-        super().__init__(entries, per_page=per_page)
-        self.number = number
-
-    async def format_page(self, menu: ViewMenuPages, entries: List[str]):
-        embed = Embed(description="")
-
-        if self.get_max_pages() > 1:
-            embed.set_footer(text=f"Page {menu.current_page+1}/{self.get_max_pages()}")
-
-        if self.number:
-
-            for index, entry in enumerate(
-                entries, start=self.per_page * menu.current_page + 1
-            ):
-                embed.description += f"{index}: {entry}\n"
-
-        else:
-            embed.description = "\n".join(entries)
 
         return embed
 
@@ -138,8 +99,7 @@ class Ffxiv(commands.Cog):
 
     async def get_server_data(self):
         """Gets a list of valid FFXIV servers for use in the server converter."""
-        async with self.bot.session.get("https://xivapi.com/servers") as res:
-            self.servers = await res.json()
+        self.servers = await self.client.get_server_list()
 
         self.servers.extend(self.datacenters)
 
@@ -173,16 +133,16 @@ class Ffxiv(commands.Cog):
         NOTE:
             The datacenter / server is case sensitive.
         """
-        res = await self.client.character_search(server, first, last)
+        res: Dict[str, Any] = await self.client.character_search(server, first, last)  # type: ignore (library is untyped)
 
         await ViewMenuPages(FormatCharacterResponse(res["Results"])).start(ctx)
 
     @ffxiv.command(aliases=["ls"])
     async def list_servers(self, ctx: commands.Context):
         """Lists the valid servers in an interactive pagination session."""
-        await ViewMenuPages(FormatList(self.servers, per_page=10, number=True)).start(
-            ctx
-        )
+        await ViewMenuPages(
+            FormatList(self.servers, per_page=10, enumerate=True)
+        ).start(ctx)
 
 
 def setup(bot):

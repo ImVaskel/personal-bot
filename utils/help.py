@@ -59,8 +59,13 @@ class FormatHelp(menus.ListPageSource):
     ) -> Embed:
         embed = Embed(
             title=f"Help for {self.group.qualified_name}!",
-            description=USE_HELP.format(self.ctx) + "\n\n" + f"{self.group.help}",
+            description=f"{USE_HELP.format(self.ctx)} \n\n",
         )
+
+        if isinstance(self.group, commands.Group):
+            embed.description += f"{self.group.help}"
+        elif isinstance(self.group, commands.Cog):
+            embed.description += f"{self.group.description}"
 
         for command in entries:
             name = f"{command} {command.signature}"
