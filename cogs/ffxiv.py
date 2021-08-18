@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from utils import Bot
 
 import discord
+import pyxivapi
 from discord.ext import commands, menus
 from discord.ext.menus.views import ViewMenuPages
 from utils import Embed
@@ -22,6 +23,9 @@ class FormatCharacterResponse(menus.ListPageSource):
 
     async def format_page(self, menu: ViewMenuPages, entry: Dict[str, Any]):
         embed = Embed(title=f"{entry['Name']}")
+
+        if self.get_max_pages() > 1:
+            embed.set_footer(text=f"Page {menu.current_page+1}/{self.get_max_pages()}")
 
         embed.set_thumbnail(url=entry["Avatar"])
 
@@ -113,8 +117,6 @@ class Ffxiv(commands.Cog):
     This mostly allows you to get info about characters, items, etc.
     """
 
-    BASE_URL = "https://xivapi.com"
-
     servers: List[str]
 
     def __init__(self, bot: Bot):
@@ -129,33 +131,17 @@ class Ffxiv(commands.Cog):
             "_dc_Chaos",
             "_dc_Light",
         ]
+        self.client = pyxivapi.XIVAPIClient(
+            self.bot.config["ffxiv_key"], self.bot.session
+        )
         self.bot.loop.create_task(self.get_server_data())
 
     async def get_server_data(self):
         """Gets a list of valid FFXIV servers for use in the server converter."""
-        self.servers = await self.request_api("https://xivapi.com/servers")
+        async with self.bot.session.get("https://xivapi.com/servers") as res:
+            self.servers = await res.json()
+
         self.servers.extend(self.datacenters)
-
-    async def handle_api_error(self, ctx: commands.Context, res: Dict[str, Any]):
-        raise ApiError(res.get("Subject"), res.get("Message"))
-
-    async def request_api(self, url: str):
-        """Makes a request to the api so that the api key can be added.
-
-        Args:
-            url (str): The url to request
-        """
-        if "?" in url:
-            url += f"&private_key={self.bot.config['ffxiv_key']}"
-        else:
-            url += f"?private_key={self.bot.config['ffxiv_key']}"
-
-        async with self.bot.session.get(url) as res:
-            r = await res.json()
-            if isinstance(r, dict):
-                if r.get("Error"):
-                    raise ApiError(r["Subject"], r["Message"])
-            return r
 
     @commands.group()
     async def ffxiv(self, ctx):
@@ -187,16 +173,7 @@ class Ffxiv(commands.Cog):
         NOTE:
             The datacenter / server is case sensitive.
         """
-        url = f"{self.BASE_URL}/character/search?name={first}+{last}&server={server}"
-
-        res = await self.request_api(url)
-
-        if res.get("Error") is True:
-            await self.handle_api_error(ctx, res)
-            return
-
-        if not res.get("Results"):
-            raise commands.BadArgument("Character not found! Please try again.")
+        res = await self.client.character_search(server, first, last)
 
         await ViewMenuPages(FormatCharacterResponse(res["Results"])).start(ctx)
 
