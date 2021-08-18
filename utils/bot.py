@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Type, Optional
 
 import aiohttp
 import discord
@@ -10,9 +14,11 @@ from discord.ext import commands
 
 class Bot(commands.Bot):
     session: aiohttp.ClientSession
+    context: Type[commands.Context]
 
-    def __init__(self):
+    def __init__(self, session: aiohttp.ClientSession):
         self.logger = logging.getLogger(__name__)
+        self.session = session
 
         root = logging.getLogger()
         root.setLevel(logging.INFO)
@@ -41,3 +47,8 @@ class Bot(commands.Bot):
                 self.logger.exception("failed to load extension `%s`", extension)
             else:
                 self.logger.info("loaded extension `%s`", extension)
+
+    async def get_context(
+        self, message, *, cls: Optional[Type[commands.Context]] = None
+    ):
+        return await super().get_context(message, cls=cls or self.context)
