@@ -15,8 +15,6 @@ from discord.ext import commands
 class Context(commands.Context):
     if TYPE_CHECKING:
         bot: Bot
-        author: Union[discord.Member, discord.User]
-        message: discord.Message
 
     @property
     def embed(self):

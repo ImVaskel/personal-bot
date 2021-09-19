@@ -5,7 +5,7 @@ import discord
 from discord.ext import commands, menus
 from discord.ext.menus.views import ViewMenuPages
 
-from utils import FormatList, Context
+from utils import FormatList, Context, Embed
 
 
 class Meta(commands.Cog):
@@ -52,6 +52,11 @@ class Meta(commands.Cog):
 
         embed.add_field(name="API Latency", value=f"``{elapsed:,}ms``", inline=False)
         await msg.edit(embed=embed)
+
+    @commands.command(aliases=["src"])
+    async def source(self, ctx: Context):
+        """Sends the source of the bot"""
+        await ctx.send("<https://github.com/imvaskel/personal-bot>")
 
 
 def setup(bot):

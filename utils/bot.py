@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -39,6 +40,9 @@ class Bot(commands.Bot):
             intents=intents,
             allowed_mentions=discord.AllowedMentions.none(),
         )
+        os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
+        os.environ["JISHAKU_NO_DM_TRACEBACK"] = "True"
+        os.environ["JISHAKU_HIDE"] = "True"
 
         for extension in self.config["extensions"]:
             try:

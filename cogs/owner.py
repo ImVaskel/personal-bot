@@ -4,23 +4,15 @@ import discord
 from discord.ext import commands, menus
 from discord.ext.menus.views import ViewMenuPages
 
-from utils import Codeblock
-
-
-class PaginateSplitString(menus.ListPageSource):
-    def __init__(self, entry):
-        super().__init__(entry, per_page=1)
-
-    async def format_page(self, menu, entry: str):
-        return entry
+from utils import Codeblock, FormatList, Context
 
 
 class Owner(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def cog_check(self, ctx: commands.Context):
-        return await ctx.bot.is_owner(ctx.author)
+    async def cog_check(self, ctx: Context):
+        return await ctx.bot.is_owner(ctx.author)  # type: ignore
 
     @commands.group()
     async def dev(self, ctx):
@@ -28,7 +20,7 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @dev.command(name="load")
-    async def load_extension(self, ctx: commands.Context, *, extension):
+    async def load_extension(self, ctx: Context, *, extension):
         try:
             ctx.bot.load_extension(extension)
         except commands.ExtensionError as err:
@@ -39,11 +31,12 @@ class Owner(commands.Cog):
                 )
             )
             await ViewMenuPages(
-                PaginateSplitString(
+                FormatList(
                     [
                         traceback_text[v : v + 2000]
                         for v in range(0, len(traceback_text), 2000)
-                    ]
+                    ],
+                    per_page=1,
                 )
             ).start(ctx)
         else:

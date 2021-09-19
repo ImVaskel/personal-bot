@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from discord.ui.select import select
+
+
 from .constants import Embed
 
 if TYPE_CHECKING:
-    from typing import Mapping, List, Optional, Tuple, Union
+    from typing import Mapping, List, Optional, Tuple, Union, Any
+
+    from discord.ui.select import Select
 
     from .bot import Bot
 
@@ -13,7 +18,27 @@ import discord
 from discord.ext import commands, menus
 from discord.ext.menus.views import ViewMenuPages
 
-USE_HELP = "Use ``{0.prefix}help <command/module>`` for more help!"
+USE_HELP = "Use ``{0.clean_prefix}help <command/module>`` for more help!"
+
+
+class HelpViewMenu(ViewMenuPages):
+    def __init__(self, source, **kwargs):
+        super().__init__(source)
+        self.msg: Optional[discord.Message] = kwargs.get("message")
+        self.select: Optional[Select] = kwargs.get("select")
+
+    async def send_initial_message(self, ctx, channel):
+        page = await self._source.get_page(0)
+        kwargs = await self._get_kwargs_from_page(page)
+        view = self.build_view()
+
+        if view and self.select:
+            view.add_item(select)
+
+        if self.msg:
+            await self.msg.edit(**kwargs, view=view)
+            return self.msg
+        return await channel.send(**kwargs, view=view)
 
 
 class FormatBotHelp(menus.ListPageSource):
@@ -22,7 +47,9 @@ class FormatBotHelp(menus.ListPageSource):
         self.ctx = ctx
 
     async def format_page(
-        self, menu: ViewMenuPages, entries: List[commands.Cog, List[commands.Command]]
+        self,
+        menu: ViewMenuPages,
+        entries: List[Tuple[commands.Cog, List[commands.Command]]],
     ):
         embed = Embed(title=f"Help!", description=USE_HELP.format(self.ctx))
 
@@ -55,12 +82,13 @@ class FormatHelp(menus.ListPageSource):
         self.group = group
 
     async def format_page(
-        self, menu: menus.Menu, entries: List[commands.Command]
+        self, menu: menus.MenuPages, entries: List[commands.Command]
     ) -> Embed:
         embed = Embed(
             title=f"Help for {self.group.qualified_name}!",
             description=f"{USE_HELP.format(self.ctx)} \n\n",
         )
+        assert isinstance(embed.description, str)
 
         if isinstance(self.group, commands.Group):
             embed.description += f"{self.group.help}"
@@ -83,9 +111,12 @@ class FormatHelp(menus.ListPageSource):
 
 
 class HelpCommand(commands.HelpCommand):
-    ctx: commands.Context
+    if TYPE_CHECKING:
+        ctx: commands.Context
 
     async def filter_commands(self, commands, *, sort=False, key=None):
+        assert self.context is not None  # appease the linter
+
         if await self.context.bot.is_owner(self.context.author):
             return commands
 
@@ -94,6 +125,8 @@ class HelpCommand(commands.HelpCommand):
     async def send_bot_help(
         self, mapping: Mapping[Optional[commands.Cog], List[commands.Command]]
     ):
+        assert self.context is not None  # appease the linter
+
         filtered: List[Tuple[commands.Cog, List[commands.Command]]] = []
 
         for k, v in mapping.items():
@@ -105,19 +138,23 @@ class HelpCommand(commands.HelpCommand):
         if not filtered:
             return await self.get_destination().send("You cannot use any commands!")
 
-        await ViewMenuPages(FormatBotHelp(filtered, self.context)).start(self.context)
+        await HelpViewMenu(FormatBotHelp(filtered, self.context)).start(self.context)
 
     async def send_group_help(self, group: commands.Group):
+        assert self.context is not None  # appease the linter
+
         filtered = await self.filter_commands(list(group.commands))
 
         if not filtered:
             return await self.send_command_help(group)
 
-        await ViewMenuPages(
+        await HelpViewMenu(
             source=FormatHelp(filtered, self.context, group=group)
         ).start(self.context)
 
     async def send_cog_help(self, cog: commands.Cog):
+        assert self.context is not None  # appease the linter
+
         filtered = await self.filter_commands(cog.get_commands())
 
         if not filtered:
@@ -125,11 +162,13 @@ class HelpCommand(commands.HelpCommand):
                 "You cannot use any commands in this module!"
             )
 
-        await ViewMenuPages(source=FormatHelp(filtered, self.context, group=cog)).start(
+        await HelpViewMenu(source=FormatHelp(filtered, self.context, group=cog)).start(
             self.context
         )
 
     async def send_command_help(self, command: commands.Command):
+        assert self.context is not None  # appease the linter
+
         embed = Embed(
             title=f"Help for {command}!", description=USE_HELP.format(self.context)
         )

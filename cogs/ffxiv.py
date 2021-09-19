@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
+
+from discord.ext.commands.errors import CommandError
 
 if TYPE_CHECKING:
-    from typing import List, Dict, Any, Optional
+    from typing import List, Dict, Any, Optional, Union
 
     from utils import Bot
 
@@ -11,7 +13,12 @@ import discord
 import pyxivapi
 from discord.ext import commands, menus
 from discord.ext.menus.views import ViewMenuPages
-from utils import Embed, FormatList
+from utils import Embed, FormatList, Context, Timer
+
+
+class CardApiResponse(TypedDict):
+    status: str
+    url: str
 
 
 class FormatCharacterResponse(menus.ListPageSource):
@@ -48,9 +55,9 @@ class ServerConverter(commands.Converter):
     This just casts the arg to titlecase then checks if the arg is in the list.
     """
 
-    async def convert(self, ctx: commands.Context, arg: str) -> str:
+    async def convert(self, ctx: Context, arg: str) -> str:
 
-        servers: List[str] = ctx.command.cog.servers
+        servers: List[str] = ctx.command.cog.servers  # type: ignore
 
         if not servers:
             raise commands.BadArgument(
@@ -79,6 +86,7 @@ class Ffxiv(commands.Cog):
     """
 
     servers: List[str]
+    card_base_url = "https://ffxiv-character-cards.herokuapp.com"
 
     def __init__(self, bot: Bot):
         self.bot = bot
@@ -103,6 +111,45 @@ class Ffxiv(commands.Cog):
 
         self.servers.extend(self.datacenters)
 
+    async def prepare_card(
+        self, user: Union[str, int], world: Optional[str] = None
+    ) -> CardApiResponse:
+        """Prepares a user's card
+
+        Args:
+            user (Union[str, int]): The user to use, can be a loadstone id or a player name.
+            world (Optional[str], optional): The world to use, this is only required if :param:`user` is :class:`str`. This is silently ignored
+                if :param:`user` is :class:`int`  Defaults to None.
+
+        Raises:
+            ValueError: Raised if :param:`user` is passed as :class:`str` and :param:`world` isn't passed.
+            CommandError: A generic error occured with the api.
+
+        Returns:
+            dict[str, Any]: The api response.
+        """
+        if isinstance(user, str) and world is None:
+            raise ValueError(
+                "User was passed as type `str`, but `world` was not passed."
+            )
+
+        if isinstance(user, int):
+            url = f"{self.card_base_url}/prepare/id/{user}"
+        else:
+            url = f"{self.card_base_url}/prepare/name/{world}/{user}"
+
+        async with self.bot.session.get(url) as res:
+            if res.content_type == "text/html":
+                raise CommandError(f"{await res.text()}")
+
+            json = await res.json()
+            if (
+                json.get("status") == "error"
+            ):  # idk, can return json or html, weird api.
+                raise CommandError(f"{json['reason']}")
+
+            return CardApiResponse(**json)
+
     @commands.group()
     async def ffxiv(self, ctx):
         """The base group for the ffxiv commands."""
@@ -110,6 +157,8 @@ class Ffxiv(commands.Cog):
 
     @ffxiv.group()
     async def search(self, ctx: commands.Context):
+        """Base group for all the user search commands.
+        Powered by XIVApi"""
         pass
 
     @commands.cooldown(1, 5, commands.BucketType.guild)
@@ -143,6 +192,35 @@ class Ffxiv(commands.Cog):
         await ViewMenuPages(
             FormatList(self.servers, per_page=10, enumerate=True)
         ).start(ctx)
+
+    @ffxiv.group()
+    async def whois(self, ctx: commands.Context):
+        """The base group for character cards.
+
+        Powered by https://github.com/ArcaneDisgea/XIV-Character-Cards"""
+        pass
+
+    @whois.command(name="name")
+    async def whois_name(self, ctx: commands.Context, world: str, *, name: str):
+        """Gets a character card via a name & world."""
+        with Timer() as timer:
+            res = await self.prepare_card(name, world)
+
+        url = self.card_base_url + res["url"]
+        await ctx.send(
+            f"Finished in {timer.elapsed} seconds.", embed=Embed().set_image(url=url)
+        )
+
+    @whois.command(name="id")
+    async def wgois_id(self, ctx: commands.Context, id: int):
+        """Gets a character card via a loadstone id."""
+        with Timer() as timer:
+            res = await self.prepare_card(id)
+
+        url = self.card_base_url + res["url"]
+        await ctx.send(
+            f"Finished in {timer.elapsed} seconds.", embed=Embed().set_image(url=url)
+        )
 
 
 def setup(bot):

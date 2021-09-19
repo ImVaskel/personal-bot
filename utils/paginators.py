@@ -7,7 +7,7 @@ from discord.ext import commands, menus
 from .constants import Embed
 
 if TYPE_CHECKING:
-    from typing import Optional, List
+    from typing import Optional, List, Union
 
     from discord.ext.menus.views import ViewMenuPages
 
@@ -34,11 +34,15 @@ class FormatList(menus.ListPageSource):
         super().__init__(entries, per_page=per_page)
         self.enumerate = enumerate
 
-    async def format_page(self, menu: ViewMenuPages, entries: List[str]):
+    async def format_page(self, menu: ViewMenuPages, entries: Union[List[str], str]):
         embed = Embed(description="")
 
         if self.get_max_pages() > 1:
             embed.set_footer(text=f"Page {menu.current_page+1}/{self.get_max_pages()}")
+
+        if isinstance(entries, str):
+            embed.description = entries
+            return embed
 
         if self.enumerate:
 
