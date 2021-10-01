@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from discord.components import SelectOption
 
 from discord.ui.select import select
 
@@ -10,11 +11,10 @@ from .constants import Embed
 if TYPE_CHECKING:
     from typing import Mapping, List, Optional, Tuple, Union, Any
 
-    from discord.ui.select import Select
-
     from .bot import Bot
 
 import discord
+from discord.ui.select import Select
 from discord.ext import commands, menus
 from discord.ext.menus.views import ViewMenuPages
 
@@ -23,7 +23,7 @@ USE_HELP = "Use ``{0.clean_prefix}help <command/module>`` for more help!"
 
 class HelpViewMenu(ViewMenuPages):
     def __init__(self, source, **kwargs):
-        super().__init__(source)
+        super().__init__(source, delete_message_after=True)
         self.msg: Optional[discord.Message] = kwargs.get("message")
         self.select: Optional[Select] = kwargs.get("select")
 
@@ -33,12 +33,30 @@ class HelpViewMenu(ViewMenuPages):
         view = self.build_view()
 
         if view and self.select:
-            view.add_item(select)
+            view.add_item(self.select)
 
         if self.msg:
             await self.msg.edit(**kwargs, view=view)
             return self.msg
         return await channel.send(**kwargs, view=view)
+
+    def should_add_reactions(self):
+        return True
+
+    def build_view(self):
+        view = super().build_view()
+        setattr(view, "ctx", self.ctx)
+
+        async def interaction_check(interaction: discord.Interaction):
+            if interaction.user == view.ctx.author:  # type: ignore
+                return True
+            await interaction.response.send_message(
+                "You do not own this menu!", ephemeral=True
+            )
+            return False
+
+        setattr(view, "interaction_check", interaction_check)
+        return view
 
 
 class FormatBotHelp(menus.ListPageSource):
@@ -110,9 +128,29 @@ class FormatHelp(menus.ListPageSource):
         return embed
 
 
+class HelpCogSelect(Select):
+    def __init__(self, help_command: HelpCommand, cogs: List[commands.Cog]):
+        self.help_command = help_command
+        options = [
+            SelectOption(
+                label=cog.qualified_name,
+                description=cog.description[:99] if cog.description else None,
+                value=cog.qualified_name,
+                default=False,
+            )
+            for cog in cogs
+            if len(cog.get_commands()) > 0
+        ]
+        super().__init__(options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        setattr(self.help_command, "message", interaction.message)
+        cog = self.help_command.context.bot.get_cog(self.values[0])  # type: ignore
+        await self.help_command.send_cog_help(cog)
+
+
 class HelpCommand(commands.HelpCommand):
-    if TYPE_CHECKING:
-        ctx: commands.Context
+    sctx: commands.Context
 
     async def filter_commands(self, commands, *, sort=False, key=None):
         assert self.context is not None  # appease the linter
@@ -121,6 +159,20 @@ class HelpCommand(commands.HelpCommand):
             return commands
 
         return await super().filter_commands(commands, sort=sort, key=key)
+
+    async def get_filtered_cogs(self) -> List[commands.Cog]:
+        """Returns a list of filtered cogs.
+        This checks if cog has > 1 cmd and the return of :meth:`filter_commands` is truthy.
+
+        Returns:
+            List[commands.Cog]: A list of the cogs.
+        """
+        return [
+            cog
+            for cog in self.context.bot.cogs.values()  # type: ignore
+            if len(cog.get_commands()) > 0
+            and await self.filter_commands(cog.get_commands())
+        ]
 
     async def send_bot_help(
         self, mapping: Mapping[Optional[commands.Cog], List[commands.Command]]
@@ -138,7 +190,10 @@ class HelpCommand(commands.HelpCommand):
         if not filtered:
             return await self.get_destination().send("You cannot use any commands!")
 
-        await HelpViewMenu(FormatBotHelp(filtered, self.context)).start(self.context)
+        await HelpViewMenu(
+            FormatBotHelp(filtered, self.context),
+            select=HelpCogSelect(self, await self.get_filtered_cogs()),
+        ).start(self.context)
 
     async def send_group_help(self, group: commands.Group):
         assert self.context is not None  # appease the linter
@@ -162,9 +217,11 @@ class HelpCommand(commands.HelpCommand):
                 "You cannot use any commands in this module!"
             )
 
-        await HelpViewMenu(source=FormatHelp(filtered, self.context, group=cog)).start(
-            self.context
-        )
+        await HelpViewMenu(
+            source=FormatHelp(filtered, self.context, group=cog),
+            message=getattr(self, "message", None),
+            select=HelpCogSelect(self, await self.get_filtered_cogs()),
+        ).start(self.context)
 
     async def send_command_help(self, command: commands.Command):
         assert self.context is not None  # appease the linter

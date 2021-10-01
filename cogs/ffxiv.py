@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, TypedDict, cast
 
 from discord.ext.commands.errors import CommandError
 
@@ -56,20 +56,24 @@ class ServerConverter(commands.Converter):
     """
 
     async def convert(self, ctx: Context, arg: str) -> str:
+        ffxiv: Optional[Ffxiv] = ctx.bot.get_cog("Ffxiv")  # type: ignore
 
-        servers: List[str] = ctx.command.cog.servers  # type: ignore
-
-        if not servers:
+        if not ffxiv:
             raise commands.BadArgument(
                 "The FFXIV cog is currently not loaded, please try again later."
             )
 
-        try:
-            index = servers.index(arg)
-        except ValueError:
-            raise commands.BadArgument("The given server is not valid.")
-        else:
-            return servers[index]
+        servers = ffxiv.servers
+        raw_datacenters = ffxiv.raw_datacenters
+        datacenters = ffxiv.datacenters
+
+        if arg in raw_datacenters:
+            arg = f"_dc_{arg}"
+
+        if arg in servers or arg in datacenters:
+            return arg
+
+        raise commands.BadArgument("The given server is not valid.")
 
 
 class ApiError(commands.CommandError):
@@ -100,6 +104,16 @@ class Ffxiv(commands.Cog):
             "_dc_Chaos",
             "_dc_Light",
         ]
+        self.raw_datacenters = [
+            "Elemental",
+            "Gaia",
+            "Mana",
+            "Aether",
+            "Primal",
+            "Crystal",
+            "Chaos",
+            "Light",
+        ]
         self.client = pyxivapi.XIVAPIClient(
             self.bot.config["ffxiv_key"], self.bot.session
         )
@@ -108,8 +122,6 @@ class Ffxiv(commands.Cog):
     async def get_server_data(self):
         """Gets a list of valid FFXIV servers for use in the server converter."""
         self.servers = await self.client.get_server_list()
-
-        self.servers.extend(self.datacenters)
 
     async def prepare_card(
         self, user: Union[str, int], world: Optional[str] = None
@@ -126,12 +138,10 @@ class Ffxiv(commands.Cog):
             CommandError: A generic error occured with the api.
 
         Returns:
-            dict[str, Any]: The api response.
+            CardApiResponse: The api response.
         """
         if isinstance(user, str) and world is None:
-            raise ValueError(
-                "User was passed as type `str`, but `world` was not passed."
-            )
+            raise ValueError("User was passed as type `str`, but `world` is `None`.")
 
         if isinstance(user, int):
             url = f"{self.card_base_url}/prepare/id/{user}"
@@ -166,14 +176,14 @@ class Ffxiv(commands.Cog):
     async def name(
         self,
         ctx: commands.Context,
+        server: ServerConverter,
         first: str,
         last: str,
-        server: ServerConverter,
     ):
         """
         Search for a player in a given server. Any of the datacenter's servers are valid.
         This will only display up to 50 users.
-        You can also use a datacenter, though this has the format ``_dc_<center>``.
+        You can also use a datacenter.
 
         Use ``ffxiv ls`` to list all valid servers.
 
@@ -182,7 +192,8 @@ class Ffxiv(commands.Cog):
         NOTE:
             The datacenter / server is case sensitive.
         """
-        res: Dict[str, Any] = await self.client.character_search(server, first, last)  # type: ignore (library is untyped)
+        res = await self.client.character_search(server, first, last)
+        res = cast(Dict[str, Any], res)
 
         await ViewMenuPages(FormatCharacterResponse(res["Results"])).start(ctx)
 
@@ -190,7 +201,7 @@ class Ffxiv(commands.Cog):
     async def list_servers(self, ctx: commands.Context):
         """Lists the valid servers in an interactive pagination session."""
         await ViewMenuPages(
-            FormatList(self.servers, per_page=10, enumerate=True)
+            FormatList(self.servers + self.raw_datacenters, per_page=10, enumerate=True)
         ).start(ctx)
 
     @ffxiv.group()
@@ -212,7 +223,7 @@ class Ffxiv(commands.Cog):
         )
 
     @whois.command(name="id")
-    async def wgois_id(self, ctx: commands.Context, id: int):
+    async def whois_id(self, ctx: commands.Context, id: int):
         """Gets a character card via a loadstone id."""
         with Timer() as timer:
             res = await self.prepare_card(id)
