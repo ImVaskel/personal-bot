@@ -4,8 +4,6 @@ from typing import TYPE_CHECKING, TypedDict, cast
 
 from discord.ext.commands.errors import CommandError
 
-from utils.xiv_character_cards import XIVCharacterCardsClient
-
 if TYPE_CHECKING:
     from typing import List, Dict, Any, Optional, Union
 
@@ -15,12 +13,7 @@ import discord
 import pyxivapi
 from discord.ext import commands, menus
 from discord.ext.menus.views import ViewMenuPages
-from utils import Embed, FormatList, Context, Timer
-
-
-class CardApiResponse(TypedDict):
-    status: str
-    url: str
+from utils import Embed, FormatList, Context, Timer, XIVCharacterCardsClient
 
 
 class FormatCharacterResponse(menus.ListPageSource):
@@ -184,7 +177,7 @@ class Ffxiv(commands.Cog):
         with Timer() as timer:
             res = await self.card_client.prepare_name(name, world)
 
-        url = res.url
+        url = res["url"]
         await ctx.send(
             f"Finished in {timer.elapsed} seconds.", embed=Embed().set_image(url=url)
         )
@@ -195,7 +188,7 @@ class Ffxiv(commands.Cog):
         with Timer() as timer:
             res = await self.card_client.prepare_id(id)
 
-        url = res.url
+        url = res["url"]
         await ctx.send(
             f"Finished in {timer.elapsed} seconds.", embed=Embed().set_image(url=url)
         )

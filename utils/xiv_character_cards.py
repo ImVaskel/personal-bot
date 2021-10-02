@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 import aiohttp
 
@@ -22,13 +22,9 @@ class ApiError(CardApiError):
         super().__init__(reason)
 
 
-class Response:
+class Response(TypedDict):
     status: str
     url: str
-
-    def __init__(self, payload: Dict[str, str]) -> None:
-        self.status = payload["status"]
-        self.url = f"{XIVCharacterCardsClient.BASE_URL}/{payload['url']}"
 
 
 class XIVCharacterCardsClient:
@@ -63,7 +59,7 @@ class XIVCharacterCardsClient:
         if res.status == 500 or json.get("status") == "error":
             raise ApiError(json["reason"])
 
-        return Response(json)
+        return Response(**json)
 
     async def prepare_name(self, world: str, name: str) -> Response:
         url = f"{self.BASE_URL}/prepare/name/{world}/{name}"
@@ -77,7 +73,7 @@ class XIVCharacterCardsClient:
         if json.get("status") == "error":
             raise ApiError(json["reason"])
 
-        return Response(json)
+        return Response(**json)
 
     async def get_id(self, id: int) -> str:
         """Return a link to the character card (if cached).
