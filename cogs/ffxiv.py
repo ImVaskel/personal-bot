@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, TypedDict, cast
 
 from discord.ext.commands.errors import CommandError
 
+from utils.xiv_character_cards import XIVCharacterCardsClient
+
 if TYPE_CHECKING:
     from typing import List, Dict, Any, Optional, Union
 
@@ -55,6 +57,8 @@ class ServerConverter(commands.Converter):
     This just casts the arg to titlecase then checks if the arg is in the list.
     """
 
+    value: str
+
     async def convert(self, ctx: Context, arg: str) -> str:
         ffxiv: Optional[Ffxiv] = ctx.bot.get_cog("Ffxiv")  # type: ignore
 
@@ -71,6 +75,7 @@ class ServerConverter(commands.Converter):
             arg = f"_dc_{arg}"
 
         if arg in servers or arg in datacenters:
+            self.value = arg
             return arg
 
         raise commands.BadArgument("The given server is not valid.")
@@ -90,7 +95,6 @@ class Ffxiv(commands.Cog):
     """
 
     servers: List[str]
-    card_base_url = "https://ffxiv-character-cards.herokuapp.com"
 
     def __init__(self, bot: Bot):
         self.bot = bot
@@ -117,48 +121,12 @@ class Ffxiv(commands.Cog):
         self.client = pyxivapi.XIVAPIClient(
             self.bot.config["ffxiv_key"], self.bot.session
         )
+        self.card_client = XIVCharacterCardsClient(bot.session)
         self.bot.loop.create_task(self.get_server_data())
 
     async def get_server_data(self):
         """Gets a list of valid FFXIV servers for use in the server converter."""
         self.servers = await self.client.get_server_list()
-
-    async def prepare_card(
-        self, user: Union[str, int], world: Optional[str] = None
-    ) -> CardApiResponse:
-        """Prepares a user's card
-
-        Args:
-            user (Union[str, int]): The user to use, can be a loadstone id or a player name.
-            world (Optional[str], optional): The world to use, this is only required if :param:`user` is :class:`str`. This is silently ignored
-                if :param:`user` is :class:`int`  Defaults to None.
-
-        Raises:
-            ValueError: Raised if :param:`user` is passed as :class:`str` and :param:`world` isn't passed.
-            CommandError: A generic error occured with the api.
-
-        Returns:
-            CardApiResponse: The api response.
-        """
-        if isinstance(user, str) and world is None:
-            raise ValueError("User was passed as type `str`, but `world` is `None`.")
-
-        if isinstance(user, int):
-            url = f"{self.card_base_url}/prepare/id/{user}"
-        else:
-            url = f"{self.card_base_url}/prepare/name/{world}/{user}"
-
-        async with self.bot.session.get(url) as res:
-            if res.content_type == "text/html":
-                raise CommandError(f"{await res.text()}")
-
-            json = await res.json()
-            if (
-                json.get("status") == "error"
-            ):  # idk, can return json or html, weird api.
-                raise CommandError(f"{json['reason']}")
-
-            return CardApiResponse(**json)
 
     @commands.group()
     async def ffxiv(self, ctx):
@@ -192,8 +160,7 @@ class Ffxiv(commands.Cog):
         NOTE:
             The datacenter / server is case sensitive.
         """
-        res = await self.client.character_search(server, first, last)
-        res = cast(Dict[str, Any], res)
+        res = await self.client.character_search(server.value, first, last)
 
         await ViewMenuPages(FormatCharacterResponse(res["Results"])).start(ctx)
 
@@ -215,9 +182,9 @@ class Ffxiv(commands.Cog):
     async def whois_name(self, ctx: commands.Context, world: str, *, name: str):
         """Gets a character card via a name & world."""
         with Timer() as timer:
-            res = await self.prepare_card(name, world)
+            res = await self.card_client.prepare_name(name, world)
 
-        url = self.card_base_url + res["url"]
+        url = res.url
         await ctx.send(
             f"Finished in {timer.elapsed} seconds.", embed=Embed().set_image(url=url)
         )
@@ -226,9 +193,9 @@ class Ffxiv(commands.Cog):
     async def whois_id(self, ctx: commands.Context, id: int):
         """Gets a character card via a loadstone id."""
         with Timer() as timer:
-            res = await self.prepare_card(id)
+            res = await self.card_client.prepare_id(id)
 
-        url = self.card_base_url + res["url"]
+        url = res.url
         await ctx.send(
             f"Finished in {timer.elapsed} seconds.", embed=Embed().set_image(url=url)
         )
