@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict, cast
-
-from discord.ext.commands.errors import CommandError
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import List, Dict, Any, Optional, Union
+    from typing import List, Dict, Any, Optional
 
     from utils import Bot
 
@@ -112,7 +110,7 @@ class Ffxiv(commands.Cog):
             "Light",
         ]
         self.client = pyxivapi.XIVAPIClient(
-            self.bot.config["ffxiv_key"], self.bot.session
+            self.bot.config["bot"]["keys"]["ffxiv_key"], self.bot.session
         )
         self.card_client = XIVCharacterCardsClient(bot.session)
         self.bot.loop.create_task(self.get_server_data())
@@ -153,7 +151,7 @@ class Ffxiv(commands.Cog):
         NOTE:
             The datacenter / server is case sensitive.
         """
-        res = await self.client.character_search(server.value, first, last)
+        res = await self.client.character_search(server, first, last)  # type: ignore
 
         await ViewMenuPages(FormatCharacterResponse(res["Results"])).start(ctx)
 
@@ -174,8 +172,9 @@ class Ffxiv(commands.Cog):
     @whois.command(name="name")
     async def whois_name(self, ctx: commands.Context, world: str, *, name: str):
         """Gets a character card via a name & world."""
-        with Timer() as timer:
-            res = await self.card_client.prepare_name(name, world)
+        async with ctx.typing():
+            with Timer() as timer:
+                res = await self.card_client.prepare_name(world, name)
 
         url = res["url"]
         await ctx.send(
@@ -185,8 +184,9 @@ class Ffxiv(commands.Cog):
     @whois.command(name="id")
     async def whois_id(self, ctx: commands.Context, id: int):
         """Gets a character card via a loadstone id."""
-        with Timer() as timer:
-            res = await self.card_client.prepare_id(id)
+        async with ctx.typing():
+            with Timer() as timer:
+                res = await self.card_client.prepare_id(id)
 
         url = res["url"]
         await ctx.send(

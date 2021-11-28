@@ -4,7 +4,7 @@ import logging
 
 import discord
 from discord.ext import commands
-from utils import Embed
+from utils import Embed, CharacterNotFound
 
 
 class Errors(commands.Cog):
@@ -12,6 +12,7 @@ class Errors(commands.Cog):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
         self.ignored = (commands.CommandNotFound,)
+        self.handle = (CharacterNotFound,)
 
     @commands.Cog.listener()
     async def on_command_error(
@@ -27,7 +28,9 @@ class Errors(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-        if not isinstance(exception, commands.CommandError):
+        if not isinstance(exception, commands.CommandError) and not isinstance(
+            exception, self.handle
+        ):
             self.logger.error(
                 f"an error occurred in `{ctx.command}`",
                 exc_info=(type(exception), exception, exception.__traceback__),

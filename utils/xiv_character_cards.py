@@ -7,7 +7,13 @@ import aiohttp
 if TYPE_CHECKING:
     from typing import Optional, Dict, Literal
 
-__all__ = ("XIVCharacterCardsClient", "CardApiError", "ApiError", "Response")
+__all__ = (
+    "XIVCharacterCardsClient",
+    "CardApiError",
+    "ApiError",
+    "Response",
+    "CharacterNotFound",
+)
 
 
 class CardApiError(Exception):
@@ -15,11 +21,19 @@ class CardApiError(Exception):
 
     reason: str
 
-
-class ApiError(CardApiError):
     def __init__(self, reason: str) -> None:
         self.reason = reason
         super().__init__(reason)
+
+
+class ApiError(CardApiError):
+    pass
+
+
+class CharacterNotFound(CardApiError):
+    """The character given was not found."""
+
+    pass
 
 
 class Response(TypedDict):
@@ -56,10 +70,13 @@ class XIVCharacterCardsClient:
         async with self._session.get(url) as res:
             json = await res.json()
 
+        if res.status == 400:
+            raise CharacterNotFound(await res.text())
+
         if res.status == 500 or json.get("status") == "error":
             raise ApiError(json["reason"])
 
-        return Response(**json)
+        return Response(status=json["status"], url=self.BASE_URL + json["url"])
 
     async def prepare_name(self, world: str, name: str) -> Response:
         url = f"{self.BASE_URL}/prepare/name/{world}/{name}"
@@ -67,13 +84,13 @@ class XIVCharacterCardsClient:
         async with self._session.get(url) as res:
             # this can return json *or* text for some reason. only on /name/world endpoints though.
             if res.status == 404:
-                raise ApiError(await res.text())
+                raise CharacterNotFound(await res.text())
             json = await res.json()
 
         if json.get("status") == "error":
             raise ApiError(json["reason"])
 
-        return Response(**json)
+        return Response(status=json["status"], url=self.BASE_URL + json["url"])
 
     async def get_id(self, id: int) -> str:
         """Return a link to the character card (if cached).

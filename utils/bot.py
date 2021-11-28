@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 import aiohttp
 import discord
-import toml
+import pytomlpp
 import jishaku
 from discord.ext import commands
 
@@ -28,10 +28,12 @@ class Bot(commands.Bot):
     def __init__(self, session: aiohttp.ClientSession):
         self.logger = logging.getLogger(__name__)
         self.session = session
-        self.config = toml.load("./config.toml")
+        self.config = pytomlpp.load("./config.toml")
 
         self.hook = Webhook.from_url(
-            self.config["webhook"], session=session, bot_token=self.config["token"]
+            self.config["bot"]["keys"]["webhook"],
+            session=session,
+            bot_token=self.config["bot"]["keys"]["token"],
         )
 
         root = logging.getLogger()
@@ -51,13 +53,12 @@ class Bot(commands.Bot):
         intents.members = True
 
         super().__init__(
-            commands.when_mentioned_or(self.config["prefix"]),
-            owner_ids=self.config["owner_ids"],
+            **self.config["bot"]["config"],
             intents=intents,
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-        for extension in self.config["extensions"]:
+        for extension in self.config["bot"]["extensions"]:
             try:
                 self.load_extension(extension)
             except commands.ExtensionError:

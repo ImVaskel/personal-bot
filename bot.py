@@ -11,7 +11,7 @@ async def startup():
     """
     async with aiohttp.ClientSession() as cs:
         bot = Bot(cs)
-        await bot.start(bot.config["token"])
+        await bot.start(bot.config["bot"]["keys"]["token"])
 
 
 if __name__ == "__main__":
