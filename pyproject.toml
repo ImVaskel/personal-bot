@@ -1,25 +1,26 @@
 [tool.poetry]
-authors = ["ImVaskel <49348256+ImVaskel@users.noreply.github.com>"]
+authors = ["ImVaskel <contact@vaskel.gay>"]
 description = "A personal discord bot."
 license = "AGPL"
 name = "personal-bot"
 version = "0.1.0"
 
 [tool.poetry.dependencies]
+python = "^3.9"
 aiohttp = "3.7.4.post0"
 discord-ext-menus = {git = "https://github.com/rapptz/discord-ext-menus"}
 discord-ext-menus-views = {git = "https://github.com/oliver-ni/discord-ext-menus-views"}
+"discord.py" = {git = "https://github.com/Rapptz/discord.py/"}
 jishaku = {git = "https://github.com/Gorialis/jishaku"}
-python = "^3.9"
 pytomlpp = "^1.0.9"
 pyxivapi = {git = "https://github.com/ImVaskel/xivapi-py"}
 uvloop = "^0.16.0"
-"discord.py" = {git = "https://github.com/Rapptz/discord.py/"}
+
+[tool.poetry.dev-dependencies]
+black = "^21.11b1"
 
 [tool.poetry.extras]
 aiohttp = ["speedups"]
-
-[tool.poetry.dev-dependencies]
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
